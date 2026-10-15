@@ -9,6 +9,11 @@ The app is sideloaded as an APK onto my own phone, not distributed through Googl
 - One screen: the total, shown large, and a single "+1" button. Nothing else.
 - The total must survive closing the app, swiping it away, and restarting the phone.
 
+## Haptic feedback on +1 (done; added off-roadmap before step 1)
+
+- Every +1 tap plays a short, distinct vibration so the tap can be felt without looking.
+- It fires even when the system "touch feedback" setting is off. No settings toggle.
+
 Next up is roadmap step 1.
 
 ## Roadmap (in order; do not build ahead of the current step)
@@ -23,7 +28,8 @@ Next up is roadmap step 1.
 - Persistence: Room. Store each tap as an event row (`id`, `timestamp`, `weight`) and compute the total as `SUM(weight)`, observed as a Flow. This is deliberate: undo, weighted buttons, and trends all fall out of an event log with no data migration, whereas a single stored counter can't be turned into history later.
 - Export Room schemas and write real migrations for every schema change. Never use destructive migrations; the tap history is the user's data. Schemas are exported by the Room Gradle plugin (`room { schemaDirectory(...) }` in `app/build.gradle.kts`) to `app/schemas/`; commit the generated JSON with every schema change.
 - Data layer lives in `data/` (`TapEvent`, `TapEventDao`, `HabitDatabase`). The UI is `MainActivity` + `CounterViewModel`, which talks to the DAO directly (no repository yet).
-- No INTERNET permission, no analytics, no ads, no Google Play Services. Keep dependencies to AndroidX/Jetpack essentials.
+- Tap haptics live in `TapHaptics`, which is called from the +1 `onClick` in `MainActivity` (the ViewModel stays free of Android services). It deliberately uses `Vibrator` rather than Compose/View haptic feedback, because those are silenced by the system touch-feedback setting. The vibration is tagged with media usage (`VibrationAttributes` on API 33+, `AudioAttributes` on 26-32) because Android 13+ treats an untagged short vibration as touch feedback. Don't "simplify" it to `LocalHapticFeedback`.
+- No INTERNET permission, no analytics, no ads, no Google Play Services. The only permission is `VIBRATE` (install-time, no prompt). Keep dependencies to AndroidX/Jetpack essentials.
 - Debug builds use `applicationIdSuffix ".debug"` (and a distinct app label) so a debug install from Android Studio can sit next to the sideloaded release build without a signature conflict.
 
 ## Environment
