@@ -14,7 +14,11 @@ The app is sideloaded as an APK onto my own phone, not distributed through Googl
 - Every +1 tap plays a short, distinct vibration so the tap can be felt without looking.
 - It fires even when the system "touch feedback" setting is off. No settings toggle (roadmap step 2 replaces this with a stronger vibration and toggles).
 
-Next up is roadmap step 1.
+## Step 1: Undo (done)
+
+- An "Undo" button at the bottom center of the home screen, shown only while this session has changes to undo. Each press removes the most recent change from this session. Undo does not vibrate.
+
+Next up is roadmap step 2.
 
 ## Roadmap (in order; one step per branch; do not build ahead of the current step)
 
@@ -35,6 +39,8 @@ Navigation: the home screen has only the gear icon. History, Trends, button setu
 - Export Room schemas and write real migrations for every schema change. Never use destructive migrations; the tap history is the user's data. Schemas are exported by the Room Gradle plugin (`room { schemaDirectory(...) }` in `app/build.gradle.kts`) to `app/schemas/`; commit the generated JSON with every schema change.
 - Data layer lives in `data/` (`TapEvent`, `TapEventDao`, `HabitDatabase`). The UI is `MainActivity` + `CounterViewModel`, which talks to the DAO directly (no repository yet).
 - Tap haptics live in `TapHaptics`, which is called from the +1 `onClick` in `MainActivity` (the ViewModel stays free of Android services). It deliberately uses `Vibrator` rather than Compose/View haptic feedback, because those are silenced by the system touch-feedback setting. The vibration is tagged with media usage (`VibrationAttributes` on API 33+, `AudioAttributes` on 26-32) because Android 13+ treats an untagged short vibration as touch feedback. Don't "simplify" it to `LocalHapticFeedback`.
+- Undo: `CounterViewModel` keeps the ids of event rows added this session in memory (survives rotation with the ViewModel; a fresh launch or process death starts a new session with nothing to undo). Undo pops the newest id and calls `TapEventDao.deleteById`; if that returns 0 (the row is already gone, e.g. deleted from History in step 5) it skips to the next id. All ViewModel writes go through one `Mutex` so an undo pressed right after +1 removes that tap, not an older one. Step 6 should push a reset row's id onto the same list so resets become undoable for free. Known gap for step 5: if History deletes every remaining session row, the Undo button stays visible until pressed once (the press is then a no-op that hides it); fix by routing History deletes through the same session state or deriving visibility from the DB.
+- The Undo button is pinned to the bottom of the screen, outside the centered column, so showing/hiding it never moves the +1 button. Its icon is a vector drawable (`res/drawable/ic_undo.xml`) rather than the material-icons library.
 - Planned data model for the roadmap (finalize when building each step, with a real migration each time):
   - Step 3 adds a `buttons` table (`id`, `name`, `weight`, plus an archived flag). Deleting a button archives it rather than removing the row, so History and Trends keep its name. `tap_events` gains a `buttonId`. Each event keeps its own `weight`, so changing a button's value never rewrites past entries.
   - Step 6 stores a reset as its own entry type in `tap_events`, not as deleted rows. The total becomes the sum of weights after the latest reset, so deleting the reset (or undoing it) restores the previous total, and deleting an older row never makes a reset stop landing on 0.
