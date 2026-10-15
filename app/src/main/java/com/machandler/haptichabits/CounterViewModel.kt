@@ -83,8 +83,23 @@ class CounterViewModel(
     }
 
     /**
-     * Removes the most recent change made this session. A row that is already gone (for example,
-     * deleted elsewhere) is skipped and the next most recent one is removed instead.
+     * Deletes one entry (from History), without vibrating. If it was a change from this session it
+     * also leaves the undo list, so Undo never lingers with nothing to undo and still removes the
+     * newest remaining change.
+     */
+    fun deleteEntry(id: Long) {
+        viewModelScope.launch {
+            writeLock.withLock {
+                dao.deleteById(id)
+                sessionChangeIds.update { it - id }
+            }
+        }
+    }
+
+    /**
+     * Removes the most recent change made this session. A row that is already gone is skipped and
+     * the next most recent one is removed instead (a safety net: History deletes go through
+     * [deleteEntry], which already drops them from the list).
      */
     fun undo() {
         viewModelScope.launch {

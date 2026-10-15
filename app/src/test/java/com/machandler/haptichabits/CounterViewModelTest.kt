@@ -218,6 +218,103 @@ class CounterViewModelTest {
     }
 
     @Test
+    fun deletingTheOnlySessionChangeHidesUndo() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+
+        viewModel.deleteEntry(dao.ids().single()) // from History
+        advanceUntilIdle()
+
+        assertEquals(emptyList<Long>(), dao.ids())
+        assertFalse(viewModel.canUndo.value)
+    }
+
+    @Test
+    fun deletingEverySessionChangeHidesUndoAndLeavesEarlierTaps() = runTest {
+        val earlier = dao.insert(TapEvent(timestamp = 1_000, weight = 1))
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(WALK)
+        advanceUntilIdle()
+        val (_, first, second) = dao.ids()
+
+        viewModel.deleteEntry(second)
+        advanceUntilIdle()
+        assertTrue(viewModel.canUndo.value)
+
+        viewModel.deleteEntry(first)
+        advanceUntilIdle()
+        assertFalse(viewModel.canUndo.value)
+
+        // Nothing left to undo, so a stray press removes nothing.
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(listOf(earlier), dao.ids())
+    }
+
+    @Test
+    fun undoAfterDeletingTheNewestSessionChangeRemovesTheNewestRemainingOne() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(WALK)
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+        val (first, second, third) = dao.ids()
+
+        viewModel.deleteEntry(third)
+        viewModel.undo()
+        advanceUntilIdle()
+
+        assertEquals(listOf(first), dao.ids())
+        assertEquals(listOf(third, second), dao.deletedIds)
+        assertTrue(viewModel.canUndo.value)
+    }
+
+    @Test
+    fun undoAfterDeletingAMiddleSessionChangeSkipsIt() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(WALK)
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+        val (first, second, third) = dao.ids()
+
+        viewModel.deleteEntry(second)
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(listOf(first), dao.ids())
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(emptyList<Long>(), dao.ids())
+        assertEquals(listOf(second, third, first), dao.deletedIds)
+        assertFalse(viewModel.canUndo.value)
+    }
+
+    @Test
+    fun deletingAnEarlierSessionsTapKeepsThisSessionsUndo() = runTest {
+        val earlier = dao.insert(TapEvent(timestamp = 1_000, weight = 5))
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+
+        viewModel.deleteEntry(earlier)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.canUndo.value)
+        assertEquals(1L, viewModel.total.value)
+    }
+
+    @Test
+    fun deleteUpdatesTheTotal() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(WALK)
+        advanceUntilIdle()
+        assertEquals(-2L, viewModel.total.value)
+
+        viewModel.deleteEntry(dao.ids().last())
+        advanceUntilIdle()
+
+        assertEquals(1L, viewModel.total.value)
+    }
+
+    @Test
     fun undoRightAfterTapWaitsForThatTapToBeSaved() = runTest {
         viewModel.recordTap(PLUS_ONE)
         advanceUntilIdle()
