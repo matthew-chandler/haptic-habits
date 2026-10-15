@@ -40,4 +40,14 @@ interface TapEventDao {
             "LEFT JOIN buttons b ON b.id = e.buttonId ORDER BY e.id DESC",
     )
     fun observeHistory(): Flow<List<HistoryEntry>>
+
+    /**
+     * Emits every entry, oldest first by id (the canonical order), and again whenever the log
+     * changes. Trends makes all of its charts from this in one pass: the running total (which
+     * restarts at 0 at each reset) and the presses per button per day. Bucketing by day happens
+     * in Kotlin, not SQL, because a day is the phone's local calendar day (DST included), which
+     * SQLite's 'localtime' can't be trusted to match.
+     */
+    @Query("SELECT id, timestamp, weight, buttonId, type FROM tap_events ORDER BY id")
+    fun observeTrendEntries(): Flow<List<TrendEntry>>
 }

@@ -101,4 +101,57 @@ class HabitButtonDaoTest {
 
         assertEquals(emptyList<HabitButton>(), dao.observeActive().first())
     }
+
+    @Test
+    fun trendButtonsAreEveryActiveButtonInOrderWithItsPressCount() = runTest {
+        val snack = dao.add("Snack", 3)
+        val walk = dao.add("Walk", -2)
+        tapDao.insert(TapEvent(timestamp = 1_000, weight = 3, buttonId = snack))
+        tapDao.insert(TapEvent(timestamp = 2_000, weight = 3, buttonId = snack))
+        tapDao.insert(TapEvent(timestamp = 3_000, weight = 1, buttonId = DEFAULT_BUTTON_ID))
+
+        assertEquals(
+            listOf(
+                TrendButton(DEFAULT_BUTTON_ID, "+1", 1, archived = false, presses = 1),
+                TrendButton(snack, "Snack", 3, archived = false, presses = 2),
+                // Never pressed, but active: still offered.
+                TrendButton(walk, "Walk", -2, archived = false, presses = 0),
+            ),
+            dao.observeTrendButtons().first(),
+        )
+    }
+
+    @Test
+    fun trendButtonsKeepDeletedButtonsWithPressesAfterTheActiveOnes() = runTest {
+        val snack = dao.add("Snack", 3)
+        val unused = dao.add("Unused", 2)
+        tapDao.insert(TapEvent(timestamp = 1_000, weight = 3, buttonId = snack))
+        dao.archive(snack)
+        dao.archive(unused)
+        val walk = dao.add("Walk", -2)
+
+        assertEquals(
+            listOf(DEFAULT_BUTTON_ID to false, walk to false, snack to true),
+            dao.observeTrendButtons().first().map { it.id to it.archived },
+        )
+    }
+
+    @Test
+    fun trendButtonsDoNotCountResets() = runTest {
+        tapDao.insert(TapEvent(timestamp = 1_000, weight = 1, buttonId = DEFAULT_BUTTON_ID))
+        tapDao.insert(TapEvent.reset(timestamp = 2_000))
+        // A reset row that (wrongly) pointed at a button still wouldn't be a press.
+        tapDao.insert(TapEvent(timestamp = 3_000, weight = 0, buttonId = DEFAULT_BUTTON_ID, type = EntryType.RESET))
+
+        assertEquals(1, dao.observeTrendButtons().first().single().presses)
+    }
+
+    @Test
+    fun trendButtonsUpdateWhenAPressIsRecorded() = runTest {
+        assertEquals(0, dao.observeTrendButtons().first().single().presses)
+
+        tapDao.insert(TapEvent(timestamp = 1_000, weight = 1, buttonId = DEFAULT_BUTTON_ID))
+
+        assertEquals(1, dao.observeTrendButtons().first().single().presses)
+    }
 }

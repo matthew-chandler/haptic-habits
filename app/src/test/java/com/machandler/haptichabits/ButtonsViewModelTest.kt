@@ -2,6 +2,7 @@ package com.machandler.haptichabits
 
 import com.machandler.haptichabits.data.HabitButton
 import com.machandler.haptichabits.data.HabitButtonDao
+import com.machandler.haptichabits.data.TrendButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -107,6 +108,9 @@ private class FakeHabitButtonDao : HabitButtonDao {
     override suspend fun update(id: Long, name: String, weight: Int): Int = change(id) { it.copy(name = name, weight = weight) }
 
     override suspend fun archive(id: Long): Int = change(id) { it.copy(archived = true) }
+
+    // Not used by the Buttons screen; Trends' tests feed its buttons in directly.
+    override fun observeTrendButtons(): Flow<List<TrendButton>> = throw UnsupportedOperationException()
 
     private fun change(id: Long, transform: (HabitButton) -> HabitButton): Int {
         val found = buttons.value.any { it.id == id }

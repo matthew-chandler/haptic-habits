@@ -321,4 +321,51 @@ class TapEventDaoTest {
 
         assertTrue(plan.toString(), plan.any { "index_tap_events_type" in it })
     }
+
+    @Test
+    fun trendEntriesAreEmptyWhenThereAreNoEntries() = runTest {
+        assertEquals(emptyList<TrendEntry>(), dao.observeTrendEntries().first())
+    }
+
+    @Test
+    fun trendEntriesAreOldestFirstByIdNotTimestampWithResets() = runTest {
+        val button = db.habitButtonDao().add("Snack", 3)
+        val first = dao.insert(TapEvent(timestamp = 5_000, weight = 3, buttonId = button))
+        // The phone's clock was set back before the reset and the next press.
+        val reset = dao.insert(TapEvent.reset(timestamp = 1_000))
+        val third = dao.insert(TapEvent(timestamp = 3_000, weight = -2, buttonId = button))
+
+        assertEquals(
+            listOf(
+                TrendEntry(first, 5_000, 3, button, EntryType.TAP),
+                TrendEntry(reset, 1_000, 0, null, EntryType.RESET),
+                TrendEntry(third, 3_000, -2, button, EntryType.TAP),
+            ),
+            dao.observeTrendEntries().first(),
+        )
+    }
+
+    @Test
+    fun trendEntriesLoadManyRowsAndEndOnTheTotal() = runTest {
+        db.runInTransaction {
+            repeat(20_000) {
+                db.openHelper.writableDatabase.execSQL(
+                    "INSERT INTO tap_events (timestamp, weight, type) VALUES (?, ?, ?)",
+                    if (it % 1_999 == 1_000) {
+                        arrayOf<Any>(it * 60_000L, 0, EntryType.RESET)
+                    } else {
+                        arrayOf<Any>(it * 60_000L, if (it % 4 == 0) -7 else 3, EntryType.TAP)
+                    },
+                )
+            }
+        }
+
+        val entries = dao.observeTrendEntries().first()
+        // The same running total as History and home: restart at 0 at each reset, in id order.
+        val total = entries.fold(0L) { sum, e -> if (e.isReset) 0 else sum + e.weight }
+
+        assertEquals(20_000, entries.size)
+        assertEquals(entries.map { it.id }.sorted(), entries.map { it.id })
+        assertEquals(dao.observeTotal().first(), total)
+    }
 }

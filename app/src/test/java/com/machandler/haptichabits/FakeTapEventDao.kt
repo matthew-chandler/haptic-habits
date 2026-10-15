@@ -4,6 +4,7 @@ import com.machandler.haptichabits.data.EntryType
 import com.machandler.haptichabits.data.HistoryEntry
 import com.machandler.haptichabits.data.TapEvent
 import com.machandler.haptichabits.data.TapEventDao
+import com.machandler.haptichabits.data.TrendEntry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,10 @@ class FakeTapEventDao(
     override fun observeHistory(): Flow<List<HistoryEntry>> = events.map { list ->
         list.sortedByDescending { it.id }
             .map { HistoryEntry(it.id, it.timestamp, it.weight, it.buttonId?.let(buttonNames::get), it.type) }
+    }
+
+    override fun observeTrendEntries(): Flow<List<TrendEntry>> = events.map { list ->
+        list.sortedBy { it.id }.map { TrendEntry(it.id, it.timestamp, it.weight, it.buttonId, it.type) }
     }
 
     fun ids(): List<Long> = events.value.map { it.id }
