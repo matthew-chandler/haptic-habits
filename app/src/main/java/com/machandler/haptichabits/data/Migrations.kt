@@ -38,5 +38,20 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * Version 2 -> 3 (step 6, reset): adds `tap_events.type`, which marks an entry as a press
+ * ([EntryType.TAP]) or a reset ([EntryType.RESET]), and an index on it for finding the latest
+ * reset. There were no resets before, so every existing row becomes a tap through the column's
+ * default; nothing else changes, so the total is unchanged.
+ *
+ * The SQL mirrors `schemas/.../3.json` exactly (Room validates the result against it).
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tap_events` ADD COLUMN `type` INTEGER NOT NULL DEFAULT ${EntryType.TAP}")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_tap_events_type` ON `tap_events` (`type`)")
+    }
+}
+
 /** Every migration, oldest first. Add each new one here. */
-internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)

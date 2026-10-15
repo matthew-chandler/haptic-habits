@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 // Every version bump needs an exported schema and a real Migration; never fall back to
 // destructive migration, the tap history is the user's data.
-@Database(entities = [TapEvent::class, HabitButton::class], version = 2, exportSchema = true)
+@Database(entities = [TapEvent::class, HabitButton::class], version = 3, exportSchema = true)
 abstract class HabitDatabase : RoomDatabase() {
     abstract fun tapEventDao(): TapEventDao
     abstract fun habitButtonDao(): HabitButtonDao

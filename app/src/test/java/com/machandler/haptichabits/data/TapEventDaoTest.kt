@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -177,5 +178,123 @@ class TapEventDaoTest {
         assertEquals(5_000, rows.size)
         assertEquals(dao.observeTotal().first(), rows.first().sumAfter)
         assertEquals(-7L, rows.last().sumAfter)
+    }
+
+    @Test
+    fun totalIsZeroRightAfterAReset() = runTest {
+        dao.insert(TapEvent(timestamp = 1_000, weight = 5))
+        dao.insert(TapEvent(timestamp = 2_000, weight = -2))
+
+        dao.insert(TapEvent.reset(timestamp = 3_000))
+
+        assertEquals(0L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun totalCountsOnlyEntriesAfterTheLatestReset() = runTest {
+        dao.insert(TapEvent(timestamp = 1_000, weight = 5))
+        dao.insert(TapEvent.reset(timestamp = 2_000))
+        dao.insert(TapEvent(timestamp = 3_000, weight = 3))
+        dao.insert(TapEvent.reset(timestamp = 4_000))
+        dao.insert(TapEvent(timestamp = 5_000, weight = 2))
+        dao.insert(TapEvent(timestamp = 6_000, weight = -7))
+
+        assertEquals(-5L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun latestResetIsTheNewestByIdNotByTimestamp() = runTest {
+        dao.insert(TapEvent(timestamp = 5_000, weight = 4))
+        // The phone's clock was set back: this reset is newer than the tap despite its timestamp.
+        dao.insert(TapEvent.reset(timestamp = 1_000))
+        dao.insert(TapEvent(timestamp = 500, weight = 1))
+
+        assertEquals(1L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun deletingTheLatestResetBringsBackTheTotalWithoutIt() = runTest {
+        dao.insert(TapEvent(timestamp = 1_000, weight = 5))
+        dao.insert(TapEvent.reset(timestamp = 2_000))
+        dao.insert(TapEvent(timestamp = 3_000, weight = 3))
+        val latest = dao.insert(TapEvent.reset(timestamp = 4_000))
+        dao.insert(TapEvent(timestamp = 5_000, weight = 2))
+
+        dao.deleteById(latest)
+
+        // Back to counting from the earlier reset: 3 + 2.
+        assertEquals(5L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun deletingTheOnlyResetBringsBackEverything() = runTest {
+        dao.insert(TapEvent(timestamp = 1_000, weight = 5))
+        val reset = dao.insert(TapEvent.reset(timestamp = 2_000))
+
+        dao.deleteById(reset)
+
+        assertEquals(5L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun deletingEntriesBeforeTheLatestResetDoesNotChangeTheTotal() = runTest {
+        val tap = dao.insert(TapEvent(timestamp = 1_000, weight = 5))
+        val olderReset = dao.insert(TapEvent.reset(timestamp = 2_000))
+        dao.insert(TapEvent.reset(timestamp = 3_000))
+        dao.insert(TapEvent(timestamp = 4_000, weight = 2))
+
+        dao.deleteById(tap)
+        assertEquals(2L, dao.observeTotal().first())
+        dao.deleteById(olderReset)
+        assertEquals(2L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun resetIsStoredWithItsTypeNoButtonAndNoWeight() = runTest {
+        val id = dao.insert(TapEvent.reset(timestamp = 1_234))
+
+        val stored = db.query("SELECT type, buttonId, weight FROM tap_events WHERE id = ?", arrayOf(id)).use { c ->
+            c.moveToFirst()
+            Triple(c.getInt(0), c.isNull(1), c.getInt(2))
+        }
+        assertEquals(Triple(EntryType.RESET, true, 0), stored)
+    }
+
+    @Test
+    fun tapsAreStoredAsTapsByDefault() = runTest {
+        val id = dao.insert(TapEvent(timestamp = 1_000, weight = 1))
+
+        val type = db.query("SELECT type FROM tap_events WHERE id = ?", arrayOf(id)).use { c ->
+            c.moveToFirst()
+            c.getInt(0)
+        }
+        assertEquals(EntryType.TAP, type)
+    }
+
+    @Test
+    fun historyMarksResets() = runTest {
+        val button = db.habitButtonDao().add("Snack", 3)
+        val tap = dao.insert(TapEvent(timestamp = 1_000, weight = 3, buttonId = button))
+        val reset = dao.insert(TapEvent.reset(timestamp = 2_000))
+
+        assertEquals(
+            listOf(
+                HistoryEntry(reset, 2_000, 0, null, EntryType.RESET),
+                HistoryEntry(tap, 1_000, 3, "Snack", EntryType.TAP),
+            ),
+            dao.observeHistory().first(),
+        )
+        assertEquals(listOf(true, false), dao.observeHistory().first().map { it.isReset })
+    }
+
+    @Test
+    fun totalQueryFindsTheLatestResetThroughTheTypeIndex() {
+        val plan = db.query(
+            "EXPLAIN QUERY PLAN SELECT COALESCE(SUM(weight), 0) FROM tap_events WHERE id > " +
+                "COALESCE((SELECT MAX(id) FROM tap_events WHERE type = ${EntryType.RESET}), 0)",
+            null,
+        ).use { c -> buildList { while (c.moveToNext()) add(c.getString(c.getColumnIndexOrThrow("detail"))) } }
+
+        assertTrue(plan.toString(), plan.any { "index_tap_events_type" in it })
     }
 }

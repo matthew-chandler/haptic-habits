@@ -1,5 +1,6 @@
 package com.machandler.haptichabits
 
+import com.machandler.haptichabits.data.EntryType
 import com.machandler.haptichabits.data.HistoryEntry
 import com.machandler.haptichabits.data.TapEvent
 import com.machandler.haptichabits.data.TapEventDao
@@ -36,16 +37,22 @@ class FakeTapEventDao(
         return deleted
     }
 
-    override fun observeTotal(): Flow<Long> = events.map { list -> list.sumOf { it.weight.toLong() } }
+    override fun observeTotal(): Flow<Long> = events.map(::totalOf)
 
     override fun observeHistory(): Flow<List<HistoryEntry>> = events.map { list ->
         list.sortedByDescending { it.id }
-            .map { HistoryEntry(it.id, it.timestamp, it.weight, it.buttonId?.let(buttonNames::get)) }
+            .map { HistoryEntry(it.id, it.timestamp, it.weight, it.buttonId?.let(buttonNames::get), it.type) }
     }
 
     fun ids(): List<Long> = events.value.map { it.id }
 
     fun events(): List<TapEvent> = events.value
 
-    fun sum(): Long = events.value.sumOf { it.weight.toLong() }
+    /** The total, as the real DAO computes it: the weights after the latest reset (by id). */
+    fun sum(): Long = totalOf(events.value)
+
+    private fun totalOf(list: List<TapEvent>): Long {
+        val latestReset = list.filter { it.type == EntryType.RESET }.maxOfOrNull { it.id } ?: 0L
+        return list.filter { it.id > latestReset }.sumOf { it.weight.toLong() }
+    }
 }
