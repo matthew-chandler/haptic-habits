@@ -113,13 +113,18 @@ private fun HapticHabitsApp() {
         composable(SETTINGS_ROUTE) {
             val settingsViewModel = viewModel { SettingsViewModel(SettingsStore.from(appContext)) }
             val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+            val total by counter.total.collectAsStateWithLifecycle()
             SettingsScreen(
                 settings = settings,
+                total = total,
                 onOpenButtons = dropUnlessResumed { navController.navigate(BUTTONS_ROUTE) },
                 onOpenHistory = dropUnlessResumed { navController.navigate(HISTORY_ROUTE) },
                 onVibrateOnPositiveChange = settingsViewModel::setVibrateOnPositive,
                 onVibrateOnNegativeChange = settingsViewModel::setVibrateOnNegative,
                 onInvertColorsChange = settingsViewModel::setInvertColors,
+                // Through the counter, so the reset joins this session's undo list. Deliberately
+                // silent, and home won't flash on return: it ignores the first total it sees.
+                onReset = counter::reset,
                 // Guarded so a double tap can't pop the home screen too.
                 onBack = dropUnlessResumed { navController.popBackStack() },
             )

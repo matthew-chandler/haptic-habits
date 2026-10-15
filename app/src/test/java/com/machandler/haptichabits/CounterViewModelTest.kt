@@ -1,6 +1,7 @@
 package com.machandler.haptichabits
 
 import com.machandler.haptichabits.data.AppSettings
+import com.machandler.haptichabits.data.EntryType
 import com.machandler.haptichabits.data.HabitButton
 import com.machandler.haptichabits.data.TapEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -312,6 +313,160 @@ class CounterViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1L, viewModel.total.value)
+    }
+
+    @Test
+    fun resetBringsTheTotalToZeroWithoutDeletingAnything() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+        val taps = dao.ids()
+
+        viewModel.reset()
+        advanceUntilIdle()
+
+        assertEquals(0L, viewModel.total.value)
+        assertEquals(3, dao.ids().size)
+        assertEquals(taps, dao.ids().take(2))
+        assertEquals(emptyList<Long>(), dao.deletedIds)
+    }
+
+    @Test
+    fun resetRecordsAResetEntryWithNoButtonAndNoWeight() = runTest {
+        viewModel.recordTap(WALK)
+        advanceUntilIdle()
+
+        viewModel.reset()
+        advanceUntilIdle()
+
+        val reset = dao.events().last()
+        assertEquals(EntryType.RESET, reset.type)
+        assertNull(reset.buttonId)
+        assertEquals(0, reset.weight)
+    }
+
+    @Test
+    fun resetCountsFromZeroAgainForLaterPresses() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.reset()
+        viewModel.recordTap(WALK)
+        advanceUntilIdle()
+
+        assertEquals(-3L, viewModel.total.value)
+    }
+
+    @Test
+    fun resetOfANegativeTotalAlsoGoesToZero() = runTest {
+        viewModel.recordTap(WALK)
+        viewModel.reset()
+        advanceUntilIdle()
+
+        assertEquals(0L, viewModel.total.value)
+    }
+
+    @Test
+    fun resetOfEarlierSessionsTotalIsUndoable() = runTest {
+        dao.insert(TapEvent(timestamp = 1_000, weight = 4))
+        viewModel = CounterViewModel(dao, buttons, settings)
+        assertFalse(viewModel.canUndo.value)
+
+        viewModel.reset()
+        advanceUntilIdle()
+        assertEquals(0L, viewModel.total.value)
+        assertTrue(viewModel.canUndo.value)
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(4L, viewModel.total.value)
+        assertFalse(viewModel.canUndo.value)
+        assertTrue(dao.events().none { it.type == EntryType.RESET })
+    }
+
+    @Test
+    fun undoTakesBackPressesAfterTheResetThenTheResetItself() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.reset()
+        viewModel.recordTap(WALK)
+        advanceUntilIdle()
+        assertEquals(-3L, viewModel.total.value)
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(0L, viewModel.total.value)
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(2L, viewModel.total.value)
+        assertTrue(viewModel.canUndo.value)
+    }
+
+    @Test
+    fun resetDoesNothingWhenTheTotalIsAlreadyZero() = runTest {
+        viewModel.reset()
+        advanceUntilIdle()
+        assertEquals(emptyList<Long>(), dao.ids())
+        assertFalse(viewModel.canUndo.value)
+
+        // Entries that add up to 0 still leave nothing to reset.
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(PLUS_ONE.copy(weight = -1))
+        viewModel.reset()
+        advanceUntilIdle()
+        assertTrue(dao.events().none { it.type == EntryType.RESET })
+    }
+
+    @Test
+    fun aDoubleConfirmedResetRecordsOneReset() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.reset()
+        viewModel.reset()
+        advanceUntilIdle()
+
+        assertEquals(1, dao.events().count { it.type == EntryType.RESET })
+
+        // So one Undo brings the total back.
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(1L, viewModel.total.value)
+    }
+
+    @Test
+    fun deletingTheResetFromHistoryRestoresTheTotalAndLeavesUndo() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.reset()
+        advanceUntilIdle()
+        val reset = dao.ids().last()
+
+        viewModel.deleteEntry(reset)
+        advanceUntilIdle()
+
+        assertEquals(1L, viewModel.total.value)
+        // Undo now takes back the press, not the deleted reset.
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(0L, viewModel.total.value)
+        assertFalse(viewModel.canUndo.value)
+        assertEquals(emptyList<Long>(), dao.ids())
+    }
+
+    @Test
+    fun deletingAnEntryBeforeTheResetKeepsTheTotalAtZero() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(WALK)
+        viewModel.reset()
+        advanceUntilIdle()
+        val (first, _, reset) = dao.ids()
+
+        viewModel.deleteEntry(first)
+        advanceUntilIdle()
+        assertEquals(0L, viewModel.total.value)
+
+        // Undoing the reset now brings back only what is left before it.
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(-3L, viewModel.total.value)
+        assertEquals(listOf(first, reset), dao.deletedIds)
     }
 
     @Test

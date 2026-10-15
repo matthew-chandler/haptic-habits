@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -36,7 +37,8 @@ class CounterViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
-     * Ids of the event rows added this session, oldest first; undo removes from the end.
+     * Ids of the event rows added this session (presses and resets), oldest first; undo removes
+     * from the end.
      * Held in memory only: it survives rotation along with this ViewModel, and a fresh launch
      * of the app starts with an empty list (so no undo button).
      */
@@ -77,6 +79,24 @@ class CounterViewModel(
             writeLock.withLock {
                 val event = TapEvent(timestamp = System.currentTimeMillis(), weight = button.weight, buttonId = button.id)
                 val id = dao.insert(event)
+                sessionChangeIds.update { it + id }
+            }
+        }
+    }
+
+    /**
+     * Brings the total to 0 (Settings -> Reset) by recording a reset entry; nothing is deleted.
+     * Like a press, it is a change from this session, so Undo removes it and brings the total back.
+     * Does nothing when the total is already 0, as such a reset would change nothing but still
+     * add a History row and an Undo step (this also makes a double-tapped confirm record one
+     * reset). Never vibrates.
+     */
+    fun reset() {
+        viewModelScope.launch {
+            writeLock.withLock {
+                // Read from the database, not [total], which may not have caught up with a write yet.
+                if (dao.observeTotal().first() == 0L) return@withLock
+                val id = dao.insert(TapEvent.reset(System.currentTimeMillis()))
                 sessionChangeIds.update { it + id }
             }
         }

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +24,7 @@ class NavigationTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun gearOpensSettingsWhereSwitchesToggleButtonsAndHistoryOpenAndBackReturnsHome() {
+    fun gearOpensSettingsWhereSwitchesToggleButtonsAndHistoryOpenResetWorksAndBackReturnsHome() {
         // A fresh install starts with the default button.
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("+1").assertIsDisplayed() }.isSuccess }
         compose.onNodeWithText("+1").performClick()
@@ -58,6 +59,21 @@ class NavigationTest {
         compose.onNodeWithText("+1").assertIsDisplayed()
         compose.onNodeWithText("0").assertIsDisplayed()
         compose.onAllNodesWithText("Undo").assertCountEquals(0)
+
+        // Reset in Settings brings the real total to 0, and Undo on home brings it back.
+        compose.onNodeWithText("+1").performClick()
+        compose.waitUntil(5_000) { isShown("1") }
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.waitUntil(5_000) { isShown("Reset total to 0") }
+        compose.onNodeWithText("Reset total to 0").performScrollTo().performClick()
+        compose.onNodeWithText("Reset").performClick()
+        compose.waitUntil(5_000) { isShown("The total is already 0") }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(5_000) { isShown("0") }
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitUntil(5_000) { isShown("1") }
+        // The press is still this session's to undo.
+        compose.onNodeWithText("Undo").assertIsDisplayed()
     }
 
     private fun isShown(text: String, substring: Boolean = false): Boolean =
