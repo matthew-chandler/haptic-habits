@@ -1,13 +1,16 @@
 package com.machandler.haptichabits.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -79,5 +82,24 @@ class TapEventDaoTest {
 
         assertEquals(0, dao.deleteById(id))
         assertEquals(0L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun insertStoresTheButtonId() = runTest {
+        val button = db.habitButtonDao().add("Snack", 3)
+        val id = dao.insert(TapEvent(timestamp = 1_000, weight = 3, buttonId = button))
+
+        val stored = db.query("SELECT buttonId FROM tap_events WHERE id = ?", arrayOf(id)).use { c ->
+            c.moveToFirst()
+            c.getLong(0)
+        }
+        assertEquals(button, stored)
+    }
+
+    @Test
+    fun insertRejectsAButtonIdThatDoesNotExist() {
+        assertThrows(SQLiteConstraintException::class.java) {
+            runBlocking { dao.insert(TapEvent(timestamp = 1_000, weight = 1, buttonId = 999)) }
+        }
     }
 }
