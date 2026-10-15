@@ -24,7 +24,7 @@ class NavigationTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun gearOpensSettingsWhereSwitchesToggleButtonsAndHistoryOpenResetWorksAndBackReturnsHome() {
+    fun gearOpensSettingsWhereSwitchesToggleButtonsHistoryAndTrendsOpenResetWorksAndBackReturnsHome() {
         // A fresh install starts with the default button.
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("+1").assertIsDisplayed() }.isSuccess }
         compose.onNodeWithText("+1").performClick()
@@ -55,6 +55,12 @@ class NavigationTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Vibrate on positive presses").assertIsDisplayed()
 
+        // Trends reads the real log: the press was deleted, so it's empty again.
+        compose.onNodeWithText("Trends").performClick()
+        compose.waitUntil(5_000) { isShown("No entries yet", substring = true) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Vibrate on positive presses").assertIsDisplayed()
+
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("+1").assertIsDisplayed()
         compose.onNodeWithText("0").assertIsDisplayed()
@@ -64,8 +70,9 @@ class NavigationTest {
         compose.onNodeWithText("+1").performClick()
         compose.waitUntil(5_000) { isShown("1") }
         compose.onNodeWithContentDescription("Settings").performClick()
-        compose.waitUntil(5_000) { isShown("Reset total to 0") }
-        compose.onNodeWithText("Reset total to 0").performScrollTo().performClick()
+        // Reset is the last row, below the fold on a small screen.
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Reset total to 0").performScrollTo() }.isSuccess }
+        compose.onNodeWithText("Reset total to 0").performClick()
         compose.onNodeWithText("Reset").performClick()
         compose.waitUntil(5_000) { isShown("The total is already 0") }
         compose.onNodeWithContentDescription("Back").performClick()
@@ -74,6 +81,12 @@ class NavigationTest {
         compose.waitUntil(5_000) { isShown("1") }
         // The press is still this session's to undo.
         compose.onNodeWithText("Undo").assertIsDisplayed()
+
+        // Trends now charts that press for the default button.
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Trends").performClick()
+        compose.waitUntil(5_000) { isShown("Total over time") }
+        compose.onNodeWithContentDescription("Presses of +1 per day", substring = true).assertExists()
     }
 
     private fun isShown(text: String, substring: Boolean = false): Boolean =

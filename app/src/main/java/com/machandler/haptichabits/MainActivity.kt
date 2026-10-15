@@ -66,6 +66,7 @@ private const val HOME_ROUTE = "home"
 private const val SETTINGS_ROUTE = "settings"
 private const val BUTTONS_ROUTE = "buttons"
 private const val HISTORY_ROUTE = "history"
+private const val TRENDS_ROUTE = "trends"
 
 @Composable
 private fun HapticHabitsApp() {
@@ -119,6 +120,7 @@ private fun HapticHabitsApp() {
                 total = total,
                 onOpenButtons = dropUnlessResumed { navController.navigate(BUTTONS_ROUTE) },
                 onOpenHistory = dropUnlessResumed { navController.navigate(HISTORY_ROUTE) },
+                onOpenTrends = dropUnlessResumed { navController.navigate(TRENDS_ROUTE) },
                 onVibrateOnPositiveChange = settingsViewModel::setVibrateOnPositive,
                 onVibrateOnNegativeChange = settingsViewModel::setVibrateOnNegative,
                 onInvertColorsChange = settingsViewModel::setInvertColors,
@@ -151,6 +153,21 @@ private fun HapticHabitsApp() {
                 // Through the counter, so a deleted change from this session also leaves the undo
                 // list. Deliberately silent: only presses vibrate.
                 onDelete = counter::deleteEntry,
+                onBack = dropUnlessResumed { navController.popBackStack() },
+            )
+        }
+        composable(TRENDS_ROUTE) {
+            val trendsViewModel = viewModel {
+                TrendsViewModel(database.tapEventDao(), database.habitButtonDao().observeTrendButtons())
+            }
+            val state by trendsViewModel.state.collectAsStateWithLifecycle()
+            val invertColors by counter.invertColors.collectAsStateWithLifecycle()
+            TrendsScreen(
+                // Like History, the colored charts wait for the color setting.
+                state = state.takeIf { invertColors != null },
+                invertColors = invertColors == true,
+                onGranularityChange = trendsViewModel::setGranularity,
+                onSelectButton = trendsViewModel::selectButton,
                 onBack = dropUnlessResumed { navController.popBackStack() },
             )
         }

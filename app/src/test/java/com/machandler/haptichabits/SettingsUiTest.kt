@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollTo
 import com.machandler.haptichabits.data.AppSettings
 import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,6 +25,19 @@ class SettingsUiTest {
     val compose = createComposeRule()
 
     private var resets = 0
+    private var trendsOpened = 0
+
+    @Test
+    fun trendsRowSitsAfterHistoryAndOpensTrends() {
+        show(total = 3)
+
+        val history = compose.onNodeWithText("History").fetchSemanticsNode().boundsInRoot
+        val trends = compose.onNodeWithText("Trends").fetchSemanticsNode().boundsInRoot
+        assertTrue(trends.top > history.top)
+        compose.onNodeWithText("Trends").performClick()
+
+        assertEquals(1, trendsOpened)
+    }
 
     @Test
     fun resetAsksFirstExplainingWhatHappensThenResets() {
@@ -82,6 +96,7 @@ class SettingsUiTest {
                     total = total,
                     onOpenButtons = {},
                     onOpenHistory = {},
+                    onOpenTrends = { trendsOpened++ },
                     onVibrateOnPositiveChange = {},
                     onVibrateOnNegativeChange = {},
                     onInvertColorsChange = {},
