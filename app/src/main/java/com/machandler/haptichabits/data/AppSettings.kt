@@ -4,6 +4,8 @@ package com.machandler.haptichabits.data
 data class AppSettings(
     val vibrateOnPositive: Boolean = true,
     val vibrateOnNegative: Boolean = true,
+    /** Swaps the value colors: positive red and negative green, for buttons and the sum flash. */
+    val invertColors: Boolean = false,
 ) {
     /** Whether a press of a button worth [value] vibrates: the switch for its sign decides. */
     fun vibratesFor(value: Int): Boolean = when {

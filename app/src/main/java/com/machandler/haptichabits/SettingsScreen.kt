@@ -25,7 +25,7 @@ import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 
 /**
  * The Settings screen: a plain scrolling list of rows. Later roadmap steps add their rows
- * (Buttons, color inversion, History, Reset, Trends) to the same list.
+ * (History, Reset, Trends) to the same list.
  *
  * [settings] is null while loading; the rows that show stored values wait for it.
  */
@@ -36,6 +36,7 @@ fun SettingsScreen(
     onOpenButtons: () -> Unit,
     onVibrateOnPositiveChange: (Boolean) -> Unit,
     onVibrateOnNegativeChange: (Boolean) -> Unit,
+    onInvertColorsChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -74,16 +75,28 @@ fun SettingsScreen(
                     checked = settings.vibrateOnNegative,
                     onCheckedChange = onVibrateOnNegativeChange,
                 )
+                SwitchRow(
+                    label = "Invert colors",
+                    supporting = "Positive red, negative green",
+                    checked = settings.invertColors,
+                    onCheckedChange = onInvertColorsChange,
+                )
             }
         }
     }
 }
 
-/** A list row with a switch; the whole row toggles it. */
+/** A list row with a switch, and an optional line explaining it; the whole row toggles it. */
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    supporting: String? = null,
+) {
     ListItem(
         headlineContent = { Text(label) },
+        supportingContent = supporting?.let { { Text(it) } },
         trailingContent = { Switch(checked = checked, onCheckedChange = null) },
         modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
     )
@@ -98,6 +111,7 @@ fun SettingsScreenPreview() {
             onOpenButtons = {},
             onVibrateOnPositiveChange = {},
             onVibrateOnNegativeChange = {},
+            onInvertColorsChange = {},
             onBack = {},
         )
     }

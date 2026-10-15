@@ -39,7 +39,10 @@ class SettingsViewModelTest {
     fun showsDefaultsOnceLoaded() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.settings.collect {} }
 
-        assertEquals(AppSettings(vibrateOnPositive = true, vibrateOnNegative = true), viewModel.settings.value)
+        assertEquals(
+            AppSettings(vibrateOnPositive = true, vibrateOnNegative = true, invertColors = false),
+            viewModel.settings.value,
+        )
     }
 
     @Test
@@ -53,6 +56,19 @@ class SettingsViewModelTest {
         viewModel.setVibrateOnNegative(false)
         advanceUntilIdle()
         assertEquals(AppSettings(vibrateOnPositive = false, vibrateOnNegative = false), viewModel.settings.value)
+    }
+
+    @Test
+    fun invertColorsSwitchUpdatesTheStoredSettings() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.settings.collect {} }
+
+        viewModel.setInvertColors(true)
+        advanceUntilIdle()
+        assertEquals(AppSettings(invertColors = true), viewModel.settings.value)
+
+        viewModel.setInvertColors(false)
+        advanceUntilIdle()
+        assertEquals(AppSettings(invertColors = false), viewModel.settings.value)
     }
 }
 

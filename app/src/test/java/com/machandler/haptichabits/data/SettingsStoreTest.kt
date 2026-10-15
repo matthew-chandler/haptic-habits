@@ -57,13 +57,37 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun colorsAreNotInvertedByDefault() = runTest {
+        assertEquals(false, openStore().settings.first().invertColors)
+    }
+
+    @Test
+    fun invertColorsIsStoredWithoutTouchingTheVibrationSwitches() = runTest {
+        val store = openStore()
+        store.setVibrateOnNegative(false)
+
+        store.setInvertColors(true)
+        assertEquals(
+            AppSettings(vibrateOnPositive = true, vibrateOnNegative = false, invertColors = true),
+            store.settings.first(),
+        )
+
+        store.setInvertColors(false)
+        assertEquals(AppSettings(vibrateOnPositive = true, vibrateOnNegative = false), store.settings.first())
+    }
+
+    @Test
     fun settingsSurviveReopeningTheFile() = runTest {
         val store = openStore()
         store.setVibrateOnPositive(false)
         store.setVibrateOnNegative(false)
+        store.setInvertColors(true)
         // Only one DataStore may have the file open at a time, as in the app.
         jobs.last().cancelAndJoin()
 
-        assertEquals(AppSettings(vibrateOnPositive = false, vibrateOnNegative = false), openStore().settings.first())
+        assertEquals(
+            AppSettings(vibrateOnPositive = false, vibrateOnNegative = false, invertColors = true),
+            openStore().settings.first(),
+        )
     }
 }

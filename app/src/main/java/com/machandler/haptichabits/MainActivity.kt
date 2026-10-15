@@ -113,6 +113,7 @@ private fun HapticHabitsApp() {
                 onOpenButtons = dropUnlessResumed { navController.navigate(BUTTONS_ROUTE) },
                 onVibrateOnPositiveChange = settingsViewModel::setVibrateOnPositive,
                 onVibrateOnNegativeChange = settingsViewModel::setVibrateOnNegative,
+                onInvertColorsChange = settingsViewModel::setInvertColors,
                 // Guarded so a double tap can't pop the home screen too.
                 onBack = dropUnlessResumed { navController.popBackStack() },
             )

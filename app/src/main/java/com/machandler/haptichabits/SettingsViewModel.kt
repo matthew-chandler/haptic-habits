@@ -22,4 +22,8 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
     fun setVibrateOnNegative(enabled: Boolean) {
         viewModelScope.launch { store.setVibrateOnNegative(enabled) }
     }
+
+    fun setInvertColors(enabled: Boolean) {
+        viewModelScope.launch { store.setInvertColors(enabled) }
+    }
 }

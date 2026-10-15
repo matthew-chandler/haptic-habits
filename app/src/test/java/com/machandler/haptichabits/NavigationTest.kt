@@ -2,6 +2,7 @@ package com.machandler.haptichabits
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -27,6 +28,7 @@ class NavigationTest {
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.waitUntil(5_000) { positiveSwitch().isOn() }
         compose.onNodeWithText("Vibrate on negative presses").assertIsDisplayed().assertIsOn()
+        compose.onNodeWithText("Invert colors").assertIsDisplayed().assertIsOff()
 
         positiveSwitch().performClick()
         // The write goes through DataStore off the main thread, so wait for it to come back.

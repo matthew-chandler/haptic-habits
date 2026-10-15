@@ -31,6 +31,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             AppSettings(
                 vibrateOnPositive = prefs[VIBRATE_ON_POSITIVE] ?: DEFAULTS.vibrateOnPositive,
                 vibrateOnNegative = prefs[VIBRATE_ON_NEGATIVE] ?: DEFAULTS.vibrateOnNegative,
+                invertColors = prefs[INVERT_COLORS] ?: DEFAULTS.invertColors,
             )
         }
         .distinctUntilChanged()
@@ -43,12 +44,17 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[VIBRATE_ON_NEGATIVE] = enabled }
     }
 
+    suspend fun setInvertColors(enabled: Boolean) {
+        dataStore.edit { it[INVERT_COLORS] = enabled }
+    }
+
     companion object {
         private val DEFAULTS = AppSettings()
 
         // These key names are what is stored on disk; never rename them.
         private val VIBRATE_ON_POSITIVE = booleanPreferencesKey("vibrate_on_positive")
         private val VIBRATE_ON_NEGATIVE = booleanPreferencesKey("vibrate_on_negative")
+        private val INVERT_COLORS = booleanPreferencesKey("invert_colors")
 
         /** The app's settings, backed by the single on-disk settings file. */
         fun from(context: Context): SettingsStore = SettingsStore(context.applicationContext.settingsDataStore)
