@@ -42,14 +42,14 @@ class MainActivity : ComponentActivity() {
                 val counter = viewModel {
                     CounterViewModel(HabitDatabase.getInstance(applicationContext).tapEventDao())
                 }
-                val haptics = remember { TapHaptics(applicationContext) }
+                val vibration = remember { TapVibration(applicationContext) }
                 val total by counter.total.collectAsStateWithLifecycle()
                 val canUndo by counter.canUndo.collectAsStateWithLifecycle()
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     CounterScreen(
                         total = total,
                         onTap = {
-                            haptics.play()
+                            vibration.play()
                             counter.recordTap()
                         },
                         canUndo = canUndo,

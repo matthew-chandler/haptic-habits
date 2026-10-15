@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Install-time permission (no prompt) for the +1 tap vibration. -->
+    <!-- Install-time permission (no prompt) for the vibration on each press. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
