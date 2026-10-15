@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,9 +34,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.machandler.haptichabits.data.EntryType
 import com.machandler.haptichabits.data.HistoryEntry
 import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 import com.machandler.haptichabits.ui.theme.valueColors
@@ -45,7 +48,9 @@ import kotlin.math.abs
 /**
  * Settings -> History: every entry, newest first, under a header for each day. A row shows the
  * time, the button's name, the entry's value (colored like the buttons) and the total right
- * after it. The trash icon deletes the entry, after a confirmation.
+ * after it. A reset shows as its own, highlighted "Reset" row with the total it cleared and
+ * "Total 0". The trash icon deletes the entry, after a confirmation that says how the current
+ * total changes.
  *
  * [rows] is null while loading.
  */
@@ -109,19 +114,21 @@ fun HistoryScreen(
 
     deletingId?.let { id ->
         // Gone (e.g. undone meanwhile) means there is nothing left to confirm.
-        rows?.find { it.entry.id == id }?.let { row ->
-            val entry = row.entry
+        val index = rows?.indexOfFirst { it.entry.id == id } ?: -1
+        if (rows != null && index >= 0) {
+            val entry = rows[index].entry
             val context = LocalContext.current
+            val dateAndTime = formatDateAndTime(context, entry.timestamp)
             AlertDialog(
                 onDismissRequest = { deletingId = null },
-                title = { Text("Delete entry?") },
+                title = { Text(if (entry.isReset) "Delete reset?" else "Delete entry?") },
                 text = {
-                    val direction = if (entry.weight > 0) "down" else "up"
-                    Text(
-                        "“${displayName(entry)}” (${ButtonRules.formatValue(entry.weight)}) from " +
-                            "${formatDateAndTime(context, entry.timestamp)} will be deleted. " +
-                            "The total goes $direction by ${abs(entry.weight)}.",
-                    )
+                    val what = if (entry.isReset) {
+                        "The reset from $dateAndTime will be deleted."
+                    } else {
+                        "“${displayName(entry)}” (${ButtonRules.formatValue(entry.weight)}) from $dateAndTime will be deleted."
+                    }
+                    Text("$what ${deleteEffect(rows, index)}")
                 },
                 confirmButton = {
                     TextButton(onClick = {
@@ -161,23 +168,52 @@ private fun DayHeader(day: Long, today: Long, timestamp: Long) {
     )
 }
 
-/** One entry: name over time on the left; value over the total after it, then trash, on the right. */
+/**
+ * One entry: name over time on the left; value over the total after it, then trash, on the right.
+ * A reset is set apart from the button entries: a tinted row with the reset icon, "Reset" in bold,
+ * and instead of a colored value, the total it cleared ("Was 12").
+ */
 @Composable
 private fun HistoryRowView(row: HistoryRow, invertColors: Boolean, onDelete: () -> Unit) {
     val entry = row.entry
     val context = LocalContext.current
     val time = DateUtils.formatDateTime(context, entry.timestamp, DateUtils.FORMAT_SHOW_TIME)
     ListItem(
-        headlineContent = { Text(displayName(entry), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        headlineContent = {
+            Text(
+                displayName(entry),
+                fontWeight = if (entry.isReset) FontWeight.Bold else null,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
         supportingContent = { Text(time) },
+        leadingContent = if (entry.isReset) {
+            { Icon(painter = painterResource(R.drawable.ic_reset), contentDescription = null) }
+        } else {
+            null
+        },
+        colors = if (entry.isReset) {
+            ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+        } else {
+            ListItemDefaults.colors()
+        },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.Center) {
-                    Text(
-                        text = ButtonRules.formatValue(entry.weight),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = valueColors(entry.weight.toLong(), invertColors)?.color ?: Color.Unspecified,
-                    )
+                    if (entry.isReset) {
+                        Text(
+                            text = "Was ${row.sumBefore}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            text = ButtonRules.formatValue(entry.weight),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = valueColors(entry.weight.toLong(), invertColors)?.color ?: Color.Unspecified,
+                        )
+                    }
                     Text(text = "Total ${row.sumAfter}", style = MaterialTheme.typography.bodySmall)
                 }
                 IconButton(onClick = onDelete) {
@@ -191,8 +227,34 @@ private fun HistoryRowView(row: HistoryRow, invertColors: Boolean, onDelete: () 
     )
 }
 
-/** The entry's button name; every entry comes from a button for now. */
-private fun displayName(entry: HistoryEntry): String = entry.buttonName ?: "(no button)"
+/** "Reset" for a reset, otherwise the entry's button name. */
+private fun displayName(entry: HistoryEntry): String =
+    if (entry.isReset) "Reset" else entry.buttonName ?: "(no button)"
+
+/**
+ * How deleting the entry at [index] of [rows] (newest first, from [withRunningSums]) changes the
+ * current (home) total, as the last sentence of the delete confirmation. Only entries after the
+ * latest reset count toward the total, so:
+ * - anything older than the latest reset leaves the total as it is;
+ * - a tap after it moves the total by minus its value;
+ * - the latest reset itself gives back the total it cleared.
+ */
+fun deleteEffect(rows: List<HistoryRow>, index: Int): String {
+    val row = rows[index]
+    if (rows.subList(0, index).any { it.entry.isReset }) {
+        return "It's older than the latest reset, so the current total doesn't change."
+    }
+    val current = rows.first().sumAfter
+    val change = if (row.entry.isReset) row.sumBefore else -row.entry.weight.toLong()
+    val direction = if (change > 0) "up" else "down"
+    return when {
+        change == 0L -> "The current total doesn't change."
+        // Nothing has changed the total since the reset: it simply goes back to what it was.
+        row.entry.isReset && current == 0L -> "The total goes back to $change."
+        row.entry.isReset -> "The total goes $direction by ${abs(change)}, to ${current + change}."
+        else -> "The total goes $direction by ${abs(change)}."
+    }
+}
 
 private fun formatDateAndTime(context: Context, timestamp: Long): String =
     DateUtils.formatDateTime(
@@ -215,7 +277,8 @@ fun HistoryScreenPreview() {
         HistoryScreen(
             rows = withRunningSums(
                 listOf(
-                    HistoryEntry(id = 4, timestamp = now, weight = 1, buttonName = "+1"),
+                    HistoryEntry(id = 5, timestamp = now, weight = 1, buttonName = "+1"),
+                    HistoryEntry(id = 4, timestamp = now - 30_000, weight = 0, buttonName = null, type = EntryType.RESET),
                     HistoryEntry(id = 3, timestamp = now - 60_000, weight = -2, buttonName = "Went for a walk"),
                     HistoryEntry(id = 2, timestamp = now - day, weight = 5, buttonName = "Doomscrolling on the phone in bed at night"),
                     HistoryEntry(id = 1, timestamp = now - 3 * day, weight = 1, buttonName = "+1"),

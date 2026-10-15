@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.machandler.haptichabits.data.EntryType
 import com.machandler.haptichabits.data.HistoryEntry
 import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 import org.junit.Assert.assertEquals
@@ -112,6 +113,60 @@ class HistoryUiTest {
 
         assertEquals(emptyList<Long>(), deleted)
         compose.onAllNodesWithText("Delete entry?").assertCountEquals(0)
+    }
+
+    @Test
+    fun aResetShowsAsResetWithTheTotalItClearedAndTotalZero() {
+        show(
+            listOf(
+                HistoryEntry(id = 3, timestamp = now, weight = 2, buttonName = "Snack"),
+                HistoryEntry(id = 2, timestamp = now, weight = 0, buttonName = null, type = EntryType.RESET),
+                HistoryEntry(id = 1, timestamp = now, weight = 7, buttonName = "Snack"),
+            ),
+        )
+
+        compose.onNodeWithText("Reset").assertIsDisplayed()
+        compose.onNodeWithText("Was 7").assertIsDisplayed()
+        compose.onNodeWithText("Total 0").assertIsDisplayed()
+        // The running total restarts at the reset.
+        compose.onNodeWithText("Total 2").assertIsDisplayed()
+        compose.onNodeWithText("Total 7").assertIsDisplayed()
+        compose.onAllNodesWithText("(no button)").assertCountEquals(0)
+    }
+
+    @Test
+    fun deletingTheLatestResetSaysTheTotalGoesBack() {
+        show(
+            listOf(
+                HistoryEntry(id = 2, timestamp = now, weight = 0, buttonName = null, type = EntryType.RESET),
+                HistoryEntry(id = 1, timestamp = now, weight = 7, buttonName = "Snack"),
+            ),
+        )
+
+        compose.onAllNodesWithContentDescription("Delete Reset", substring = true)[0].performClick()
+
+        compose.onNodeWithText("Delete reset?").assertIsDisplayed()
+        compose.onNodeWithText("The reset from", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("The total goes back to 7.", substring = true).assertIsDisplayed()
+
+        compose.onNodeWithText("Delete").performClick()
+
+        assertEquals(listOf(2L), deleted)
+    }
+
+    @Test
+    fun deletingAnEntryBeforeTheLatestResetSaysTheTotalDoesNotChange() {
+        show(
+            listOf(
+                HistoryEntry(id = 2, timestamp = now, weight = 0, buttonName = null, type = EntryType.RESET),
+                HistoryEntry(id = 1, timestamp = now, weight = 7, buttonName = "Snack"),
+            ),
+        )
+
+        compose.onAllNodesWithContentDescription("Delete Snack", substring = true)[0].performClick()
+
+        compose.onNodeWithText("Delete entry?").assertIsDisplayed()
+        compose.onNodeWithText("the current total doesn't change.", substring = true).assertIsDisplayed()
     }
 
     private fun show(newestFirst: List<HistoryEntry>) {

@@ -29,21 +29,29 @@ class HistoryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
-/** One History row: an entry and [sumAfter], the total right after it (it included). */
-data class HistoryRow(val entry: HistoryEntry, val sumAfter: Long)
+/**
+ * One History row: an entry, [sumBefore] (the total right before it) and [sumAfter] (the total
+ * right after it, it included). For a tap, sumAfter = sumBefore + its weight; for a reset,
+ * sumAfter is 0 and sumBefore is the amount it cleared.
+ */
+data class HistoryRow(val entry: HistoryEntry, val sumBefore: Long, val sumAfter: Long)
 
 /**
- * Pairs each entry with the running total up to and including it. [newestFirst] must be in the
+ * Pairs each entry with the running total before and after it. [newestFirst] must be in the
  * canonical order (id descending, as [TapEventDao.observeHistory] returns it); the sums run from
- * the oldest entry. Done here rather than in SQL because window functions (`SUM() OVER`) need
- * SQLite 3.25 (Android 11+) and a correlated subquery would be quadratic.
+ * the oldest entry and restart at 0 at each reset, so the newest row's [HistoryRow.sumAfter] is
+ * always the home total. Done here rather than in SQL because window functions (`SUM() OVER`)
+ * need SQLite 3.25 (Android 11+) and a correlated subquery would be quadratic.
  */
 fun withRunningSums(newestFirst: List<HistoryEntry>): List<HistoryRow> {
-    val sums = LongArray(newestFirst.size)
+    val before = LongArray(newestFirst.size)
+    val after = LongArray(newestFirst.size)
     var sum = 0L
     for (i in newestFirst.indices.reversed()) {
-        sum += newestFirst[i].weight
-        sums[i] = sum
+        val entry = newestFirst[i]
+        before[i] = sum
+        sum = if (entry.isReset) 0 else sum + entry.weight
+        after[i] = sum
     }
-    return newestFirst.mapIndexed { i, entry -> HistoryRow(entry, sums[i]) }
+    return newestFirst.mapIndexed { i, entry -> HistoryRow(entry, before[i], after[i]) }
 }

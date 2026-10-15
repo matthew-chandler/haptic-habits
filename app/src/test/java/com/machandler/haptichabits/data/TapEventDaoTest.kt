@@ -288,6 +288,30 @@ class TapEventDaoTest {
     }
 
     @Test
+    fun newestRunningSumMatchesTheTotalWithManyResets() = runTest {
+        db.runInTransaction {
+            repeat(5_000) {
+                db.openHelper.writableDatabase.execSQL(
+                    "INSERT INTO tap_events (timestamp, weight, type) VALUES (?, ?, ?)",
+                    if (it % 997 == 500) {
+                        arrayOf<Any>(it.toLong(), 0, EntryType.RESET)
+                    } else {
+                        arrayOf<Any>(it.toLong(), if (it % 4 == 0) -7 else 3, EntryType.TAP)
+                    },
+                )
+            }
+        }
+
+        val rows = withRunningSums(dao.observeHistory().first())
+        val total = dao.observeTotal().first()
+
+        assertEquals(5_000, rows.size)
+        assertEquals(total, rows.first().sumAfter)
+        assertEquals(0L, rows.first { it.entry.isReset }.sumAfter)
+        assertTrue(total != 0L)
+    }
+
+    @Test
     fun totalQueryFindsTheLatestResetThroughTheTypeIndex() {
         val plan = db.query(
             "EXPLAIN QUERY PLAN SELECT COALESCE(SUM(weight), 0) FROM tap_events WHERE id > " +
