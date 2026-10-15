@@ -62,6 +62,43 @@ class ValueColorsTest {
         assertReadable(DarkValuePalette.red.color, on = darkBackground)
     }
 
+    @Test
+    fun calendarLevelsRunFromEmptyToTheFullHue() {
+        for (palette in listOf(LightValuePalette, DarkValuePalette)) {
+            for (hue in listOf(palette.green, palette.red)) {
+                assertEquals(palette.empty, intensityColor(hue, palette.empty, 0))
+                assertEquals(hue.color, intensityColor(hue, palette.empty, 4))
+            }
+        }
+    }
+
+    @Test
+    fun calendarDaysWithPressesStandOutFromEmptyOnesInBothThemes() {
+        for (palette in listOf(LightValuePalette, DarkValuePalette)) {
+            for (hue in listOf(palette.green, palette.red)) {
+                val levels = (0..4).map { intensityColor(hue, palette.empty, it) }
+                // Even one press is clearly not empty (besides having a hue at all)...
+                assertTrue("level 1 vs empty: ${contrast(levels[1], levels[0])}", contrast(levels[1], levels[0]) >= 1.5f)
+                // ...and each level is further from empty than the one before.
+                levels.zipWithNext { a, b ->
+                    assertTrue("$a then $b", contrast(b, palette.empty) > contrast(a, palette.empty))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun emptyCalendarDaysAreVisibleOnTheBackground() {
+        assertTrue(contrast(LightValuePalette.empty, Color(0xFFFEF7FF)) >= 1.1f)
+        assertTrue(contrast(DarkValuePalette.empty, Color(0xFF141218)) >= 1.1f)
+    }
+
+    private fun contrast(a: Color, b: Color): Float {
+        val lighter = maxOf(a.luminance(), b.luminance())
+        val darker = minOf(a.luminance(), b.luminance())
+        return (lighter + 0.05f) / (darker + 0.05f)
+    }
+
     /** WCAG AA for normal text: a contrast ratio of at least 4.5:1. */
     private fun assertReadable(text: Color, on: Color) {
         val lighter = maxOf(text.luminance(), on.luminance())
