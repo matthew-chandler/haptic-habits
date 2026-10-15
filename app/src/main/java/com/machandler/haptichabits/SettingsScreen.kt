@@ -1,5 +1,6 @@
 package com.machandler.haptichabits
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -32,6 +33,7 @@ import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 @Composable
 fun SettingsScreen(
     settings: AppSettings?,
+    onOpenButtons: () -> Unit,
     onVibrateOnPositiveChange: (Boolean) -> Unit,
     onVibrateOnNegativeChange: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -56,6 +58,11 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
+            ListItem(
+                headlineContent = { Text("Buttons") },
+                supportingContent = { Text("Add, rename, change the value of, or delete buttons") },
+                modifier = Modifier.clickable(onClick = onOpenButtons),
+            )
             if (settings != null) {
                 SwitchRow(
                     label = "Vibrate on positive presses",
@@ -88,6 +95,7 @@ fun SettingsScreenPreview() {
     HapticHabitsTheme {
         SettingsScreen(
             settings = AppSettings(vibrateOnPositive = true, vibrateOnNegative = false),
+            onOpenButtons = {},
             onVibrateOnPositiveChange = {},
             onVibrateOnNegativeChange = {},
             onBack = {},

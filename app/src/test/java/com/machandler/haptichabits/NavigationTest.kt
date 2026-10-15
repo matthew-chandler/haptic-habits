@@ -20,7 +20,10 @@ class NavigationTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun gearOpensSettingsWhereSwitchesToggleAndBackReturnsHome() {
+    fun gearOpensSettingsWhereSwitchesToggleAndButtonsOpenAndBackReturnsHome() {
+        // A fresh install starts with the default button.
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("+1").assertIsDisplayed() }.isSuccess }
+
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.waitUntil(5_000) { positiveSwitch().isOn() }
         compose.onNodeWithText("Vibrate on negative presses").assertIsDisplayed().assertIsOn()
@@ -29,6 +32,12 @@ class NavigationTest {
         // The write goes through DataStore off the main thread, so wait for it to come back.
         compose.waitUntil(5_000) { !positiveSwitch().isOn() }
         compose.onNodeWithText("Vibrate on negative presses").assertIsOn()
+
+        compose.onNodeWithText("Buttons").performClick()
+        compose.onNodeWithText("Add button").assertIsDisplayed()
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("+1").assertIsDisplayed() }.isSuccess }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Vibrate on positive presses").assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("+1").assertIsDisplayed()

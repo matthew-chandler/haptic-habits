@@ -1,6 +1,7 @@
 package com.machandler.haptichabits
 
 import com.machandler.haptichabits.data.AppSettings
+import com.machandler.haptichabits.data.HabitButton
 import com.machandler.haptichabits.data.TapEvent
 import com.machandler.haptichabits.data.TapEventDao
 import kotlinx.coroutines.CompletableDeferred
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -26,13 +28,14 @@ import org.junit.Test
 class CounterViewModelTest {
     private lateinit var dao: FakeTapEventDao
     private val settings = MutableStateFlow(AppSettings())
+    private val buttons = MutableStateFlow(listOf(PLUS_ONE, WALK))
     private lateinit var viewModel: CounterViewModel
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         dao = FakeTapEventDao()
-        viewModel = CounterViewModel(dao, settings)
+        viewModel = CounterViewModel(dao, buttons, settings)
     }
 
     @After
@@ -44,14 +47,14 @@ class CounterViewModelTest {
     fun nothingToUndoAtStartEvenWithEarlierTaps() = runTest {
         // Taps from a previous session are in the log, but this session hasn't changed anything.
         dao.insert(TapEvent(timestamp = 1_000, weight = 1))
-        viewModel = CounterViewModel(dao, settings)
+        viewModel = CounterViewModel(dao, buttons, settings)
 
         assertFalse(viewModel.canUndo.value)
     }
 
     @Test
     fun tapMakesUndoAvailable() = runTest {
-        viewModel.recordTap(1)
+        viewModel.recordTap(PLUS_ONE)
         advanceUntilIdle()
 
         assertTrue(viewModel.canUndo.value)
@@ -60,10 +63,47 @@ class CounterViewModelTest {
 
     @Test
     fun tapRecordsItsWeight() = runTest {
-        viewModel.recordTap(-3)
+        viewModel.recordTap(WALK)
         advanceUntilIdle()
 
         assertEquals(-3L, dao.sum())
+    }
+
+    @Test
+    fun tapRecordsTheButtonAndTheValueItHasNow() = runTest {
+        viewModel.recordTap(WALK)
+        viewModel.recordTap(WALK.copy(weight = 7)) // value changed in Settings since
+        advanceUntilIdle()
+
+        assertEquals(listOf(WALK.id to -3, WALK.id to 7), dao.events().map { it.buttonId to it.weight })
+    }
+
+    @Test
+    fun exposesTheActiveButtonsOnceLoaded() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.buttons.collect {} }
+        assertEquals(listOf(PLUS_ONE, WALK), viewModel.buttons.value)
+
+        buttons.value = emptyList()
+
+        assertEquals(emptyList<HabitButton>(), viewModel.buttons.value)
+    }
+
+    @Test
+    fun undoWorksAcrossDifferentButtons() = runTest {
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(WALK)
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+        assertEquals(-1L, dao.sum())
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(-2L, dao.sum())
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(1L, dao.sum())
+        assertEquals(listOf(PLUS_ONE.id), dao.events().map { it.buttonId })
     }
 
     @Test
@@ -87,8 +127,8 @@ class CounterViewModelTest {
 
     @Test
     fun undoRemovesMostRecentSessionTapFirst() = runTest {
-        viewModel.recordTap(1)
-        viewModel.recordTap(1)
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(PLUS_ONE)
         advanceUntilIdle()
         val (first, second) = dao.ids()
 
@@ -109,7 +149,7 @@ class CounterViewModelTest {
     @Test
     fun undoNeverTouchesTapsFromEarlierSessions() = runTest {
         val earlier = dao.insert(TapEvent(timestamp = 1_000, weight = 1))
-        viewModel.recordTap(1)
+        viewModel.recordTap(PLUS_ONE)
         advanceUntilIdle()
 
         viewModel.undo()
@@ -122,8 +162,8 @@ class CounterViewModelTest {
 
     @Test
     fun undoSkipsSessionTapsThatWereAlreadyDeleted() = runTest {
-        viewModel.recordTap(1)
-        viewModel.recordTap(1)
+        viewModel.recordTap(PLUS_ONE)
+        viewModel.recordTap(PLUS_ONE)
         advanceUntilIdle()
         val (first, second) = dao.ids()
         dao.deleteById(second) // e.g. deleted from History in a later roadmap step
@@ -138,13 +178,13 @@ class CounterViewModelTest {
 
     @Test
     fun undoRightAfterTapWaitsForThatTapToBeSaved() = runTest {
-        viewModel.recordTap(1)
+        viewModel.recordTap(PLUS_ONE)
         advanceUntilIdle()
         val older = dao.ids().single()
 
         val gate = CompletableDeferred<Unit>()
         dao.insertGate = gate
-        viewModel.recordTap(1) // Insert is now held up.
+        viewModel.recordTap(PLUS_ONE) // Insert is now held up.
         viewModel.undo()
         gate.complete(Unit)
         advanceUntilIdle()
@@ -154,6 +194,9 @@ class CounterViewModelTest {
         assertTrue(viewModel.canUndo.value)
     }
 }
+
+private val PLUS_ONE = HabitButton(id = 1, name = "+1", weight = 1, position = 0)
+private val WALK = HabitButton(id = 2, name = "Walk", weight = -3, position = 1)
 
 /** In-memory stand-in for the Room DAO, so ViewModel logic can be tested without a database. */
 private class FakeTapEventDao : TapEventDao {
@@ -182,6 +225,8 @@ private class FakeTapEventDao : TapEventDao {
     override fun observeTotal(): Flow<Long> = events.map { list -> list.sumOf { it.weight.toLong() } }
 
     fun ids(): List<Long> = events.value.map { it.id }
+
+    fun events(): List<TapEvent> = events.value
 
     fun sum(): Long = events.value.sumOf { it.weight.toLong() }
 }

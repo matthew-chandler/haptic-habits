@@ -3,6 +3,7 @@ package com.machandler.haptichabits
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.machandler.haptichabits.data.AppSettings
+import com.machandler.haptichabits.data.HabitButton
 import com.machandler.haptichabits.data.TapEvent
 import com.machandler.haptichabits.data.TapEventDao
 import kotlinx.coroutines.flow.Flow
@@ -18,11 +19,16 @@ import kotlinx.coroutines.sync.withLock
 
 class CounterViewModel(
     private val dao: TapEventDao,
+    buttons: Flow<List<HabitButton>>,
     settings: Flow<AppSettings>,
 ) : ViewModel() {
 
     /** The running total, or null until the first value has loaded from the database. */
     val total: StateFlow<Long?> = dao.observeTotal()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The active buttons in display order, or null until loaded (so the empty hint never flashes). */
+    val buttons: StateFlow<List<HabitButton>?> = buttons
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
@@ -52,11 +58,12 @@ class CounterViewModel(
     // after +1 waits for that tap's insert (and its id) instead of undoing an older change.
     private val writeLock = Mutex()
 
-    /** Records a press of a button worth [weight]. */
-    fun recordTap(weight: Int) {
+    /** Records a press of [button], with the value it has right now. */
+    fun recordTap(button: HabitButton) {
         viewModelScope.launch {
             writeLock.withLock {
-                val id = dao.insert(TapEvent(timestamp = System.currentTimeMillis(), weight = weight))
+                val event = TapEvent(timestamp = System.currentTimeMillis(), weight = button.weight, buttonId = button.id)
+                val id = dao.insert(event)
                 sessionChangeIds.update { it + id }
             }
         }
