@@ -25,7 +25,7 @@ import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 
 /**
  * The Settings screen: a plain scrolling list of rows. Later roadmap steps add their rows
- * (History, Reset, Trends) to the same list.
+ * (Reset, Trends) to the same list.
  *
  * [settings] is null while loading; the rows that show stored values wait for it.
  */
@@ -34,6 +34,7 @@ import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 fun SettingsScreen(
     settings: AppSettings?,
     onOpenButtons: () -> Unit,
+    onOpenHistory: () -> Unit,
     onVibrateOnPositiveChange: (Boolean) -> Unit,
     onVibrateOnNegativeChange: (Boolean) -> Unit,
     onInvertColorsChange: (Boolean) -> Unit,
@@ -63,6 +64,11 @@ fun SettingsScreen(
                 headlineContent = { Text("Buttons") },
                 supportingContent = { Text("Add, rename, change the value of, or delete buttons") },
                 modifier = Modifier.clickable(onClick = onOpenButtons),
+            )
+            ListItem(
+                headlineContent = { Text("History") },
+                supportingContent = { Text("Every entry with the total after it; delete entries") },
+                modifier = Modifier.clickable(onClick = onOpenHistory),
             )
             if (settings != null) {
                 SwitchRow(
@@ -109,6 +115,7 @@ fun SettingsScreenPreview() {
         SettingsScreen(
             settings = AppSettings(vibrateOnPositive = true, vibrateOnNegative = false),
             onOpenButtons = {},
+            onOpenHistory = {},
             onVibrateOnPositiveChange = {},
             onVibrateOnNegativeChange = {},
             onInvertColorsChange = {},

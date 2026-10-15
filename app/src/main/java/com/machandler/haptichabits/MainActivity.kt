@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
 private const val HOME_ROUTE = "home"
 private const val SETTINGS_ROUTE = "settings"
 private const val BUTTONS_ROUTE = "buttons"
+private const val HISTORY_ROUTE = "history"
 
 @Composable
 private fun HapticHabitsApp() {
@@ -115,6 +116,7 @@ private fun HapticHabitsApp() {
             SettingsScreen(
                 settings = settings,
                 onOpenButtons = dropUnlessResumed { navController.navigate(BUTTONS_ROUTE) },
+                onOpenHistory = dropUnlessResumed { navController.navigate(HISTORY_ROUTE) },
                 onVibrateOnPositiveChange = settingsViewModel::setVibrateOnPositive,
                 onVibrateOnNegativeChange = settingsViewModel::setVibrateOnNegative,
                 onInvertColorsChange = settingsViewModel::setInvertColors,
@@ -130,6 +132,20 @@ private fun HapticHabitsApp() {
                 onAdd = buttonsViewModel::add,
                 onUpdate = buttonsViewModel::update,
                 onDelete = buttonsViewModel::delete,
+                onBack = dropUnlessResumed { navController.popBackStack() },
+            )
+        }
+        composable(HISTORY_ROUTE) {
+            val historyViewModel = viewModel { HistoryViewModel(database.tapEventDao()) }
+            val rows by historyViewModel.rows.collectAsStateWithLifecycle()
+            val invertColors by counter.invertColors.collectAsStateWithLifecycle()
+            HistoryScreen(
+                // Like the home buttons, the values wait for the color setting.
+                rows = rows.takeIf { invertColors != null },
+                invertColors = invertColors == true,
+                // Through the counter, so a deleted change from this session also leaves the undo
+                // list. Deliberately silent: only presses vibrate.
+                onDelete = counter::deleteEntry,
                 onBack = dropUnlessResumed { navController.popBackStack() },
             )
         }
