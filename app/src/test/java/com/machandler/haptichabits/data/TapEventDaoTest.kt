@@ -61,4 +61,23 @@ class TapEventDaoTest {
 
         assertNotEquals(first, second)
     }
+
+    @Test
+    fun deleteByIdRemovesOnlyThatTap() = runTest {
+        dao.insert(TapEvent(timestamp = 1_000, weight = 1))
+        val second = dao.insert(TapEvent(timestamp = 2_000, weight = 5))
+        dao.insert(TapEvent(timestamp = 3_000, weight = 1))
+
+        assertEquals(1, dao.deleteById(second))
+        assertEquals(2L, dao.observeTotal().first())
+    }
+
+    @Test
+    fun deleteByIdReturnsZeroWhenAlreadyGone() = runTest {
+        val id = dao.insert(TapEvent(timestamp = 1_000, weight = 1))
+        dao.deleteById(id)
+
+        assertEquals(0, dao.deleteById(id))
+        assertEquals(0L, dao.observeTotal().first())
+    }
 }
