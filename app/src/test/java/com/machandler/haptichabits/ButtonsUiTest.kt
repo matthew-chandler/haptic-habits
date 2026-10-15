@@ -35,6 +35,7 @@ class ButtonsUiTest {
                 CounterScreen(
                     total = 4,
                     buttons = listOf(PLUS_ONE, SNACK),
+                    invertColors = false,
                     onPress = { pressed += it },
                     canUndo = false,
                     onUndo = {},
@@ -56,7 +57,7 @@ class ButtonsUiTest {
     fun homeWithNoButtonsPointsToSettings() {
         compose.setContent {
             HapticHabitsTheme {
-                CounterScreen(total = 4, buttons = emptyList(), onPress = {}, canUndo = false, onUndo = {}, onOpenSettings = {})
+                CounterScreen(total = 4, buttons = emptyList(), invertColors = false, onPress = {}, canUndo = false, onUndo = {}, onOpenSettings = {})
             }
         }
 

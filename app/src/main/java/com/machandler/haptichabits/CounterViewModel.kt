@@ -23,9 +23,13 @@ class CounterViewModel(
     settings: Flow<AppSettings>,
 ) : ViewModel() {
 
-    /** The running total, or null until the first value has loaded from the database. */
+    /**
+     * The running total, or null until the first value has loaded from the database. Kept up to
+     * date even while Settings is showing, so the home screen comes back with the current total
+     * rather than a stale one that then changes (which would flash).
+     */
     val total: StateFlow<Long?> = dao.observeTotal()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** The active buttons in display order, or null until loaded (so the empty hint never flashes). */
     val buttons: StateFlow<List<HabitButton>?> = buttons
@@ -43,16 +47,25 @@ class CounterViewModel(
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    // Collected from creation so the switches are known by the first press. Until the stored
-    // values load (a few ms after launch) the defaults apply.
-    private val settings: StateFlow<AppSettings> = settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    // Collected from creation so the switches are known by the first press. Null until the
+    // stored values load (a few ms after launch).
+    private val settings: StateFlow<AppSettings?> = settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
-     * Whether a press worth [weight] should vibrate, per the Settings switch for its sign.
-     * The caller plays the vibration, which keeps this class free of Android services.
+     * Whether value colors are swapped (positive red, negative green), or null until the settings
+     * have loaded, so the buttons can wait instead of showing the wrong colors first.
      */
-    fun vibratesFor(weight: Int): Boolean = settings.value.vibratesFor(weight)
+    val invertColors: StateFlow<Boolean?> = this.settings
+        .map { it?.invertColors }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Whether a press worth [weight] should vibrate, per the Settings switch for its sign (the
+     * defaults until the settings have loaded). The caller plays the vibration, which keeps this
+     * class free of Android services.
+     */
+    fun vibratesFor(weight: Int): Boolean = (settings.value ?: AppSettings()).vibratesFor(weight)
 
     // Runs writes one at a time, in the order they were requested, so an undo pressed right
     // after +1 waits for that tap's insert (and its id) instead of undoing an older change.

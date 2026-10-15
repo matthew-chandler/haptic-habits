@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,7 +38,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -48,6 +48,7 @@ import com.machandler.haptichabits.data.HabitButton
 import com.machandler.haptichabits.data.HabitDatabase
 import com.machandler.haptichabits.data.SettingsStore
 import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
+import com.machandler.haptichabits.ui.theme.valueColors
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +87,7 @@ private fun HapticHabitsApp() {
             val total by counter.total.collectAsStateWithLifecycle()
             val buttons by counter.buttons.collectAsStateWithLifecycle()
             val canUndo by counter.canUndo.collectAsStateWithLifecycle()
+            val invertColors by counter.invertColors.collectAsStateWithLifecycle()
             // Every press goes through here: vibrate by the sign of the button's value, then record it.
             fun press(button: HabitButton) {
                 if (counter.vibratesFor(button.weight)) vibration.play()
@@ -94,7 +96,9 @@ private fun HapticHabitsApp() {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                 CounterScreen(
                     total = total,
-                    buttons = buttons,
+                    // The buttons wait for the color setting so they never show the wrong colors first.
+                    buttons = buttons.takeIf { invertColors != null },
+                    invertColors = invertColors == true,
                     onPress = ::press,
                     canUndo = canUndo,
                     // Deliberately silent: only presses vibrate.
@@ -136,12 +140,15 @@ private fun HapticHabitsApp() {
  * The home screen: the total, large, above the active buttons. The total stays put; the buttons
  * scroll beneath it when there are more than fit.
  *
- * [total] and [buttons] are null while loading.
+ * [total] and [buttons] are null while loading. Buttons are green for positive values and red for
+ * negative ones, and the total flashes green going up and red going down; [invertColors] swaps
+ * both.
  */
 @Composable
 fun CounterScreen(
     total: Long?,
     buttons: List<HabitButton>?,
+    invertColors: Boolean,
     onPress: (HabitButton) -> Unit,
     canUndo: Boolean,
     onUndo: () -> Unit,
@@ -157,12 +164,7 @@ fun CounterScreen(
                     .padding(bottom = 32.dp),
                 contentAlignment = Alignment.BottomCenter,
             ) {
-                Text(
-                    // Blank while loading so a stale 0 never flashes on launch.
-                    text = total?.toString() ?: "",
-                    style = MaterialTheme.typography.displayLarge.copy(fontSize = 96.sp, lineHeight = 104.sp),
-                    maxLines = 1,
-                )
+                FlashingTotal(total = total, invertColors = invertColors)
             }
             val buttonAreaModifier = Modifier
                 .fillMaxWidth()
@@ -183,7 +185,7 @@ fun CounterScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     items(buttons, key = { it.id }) { button ->
-                        HabitButtonView(button = button, onClick = { onPress(button) })
+                        HabitButtonView(button = button, invertColors = invertColors, onClick = { onPress(button) })
                     }
                 }
             }
@@ -223,11 +225,21 @@ fun CounterScreen(
 private const val TOTAL_AREA_WEIGHT = 2f
 private const val BUTTON_AREA_WEIGHT = 3f
 
-/** One habit button: its name, and below it its value (unless the name already says just that, like "+1"). */
+/**
+ * One habit button, colored by the sign of its value: its name, and below it its value (unless
+ * the name already says just that, like "+1").
+ */
 @Composable
-private fun HabitButtonView(button: HabitButton, onClick: () -> Unit) {
+private fun HabitButtonView(button: HabitButton, invertColors: Boolean, onClick: () -> Unit) {
+    val colors = valueColors(button.weight.toLong(), invertColors)
     Button(
         onClick = onClick,
+        // A value is never 0, but fall back to the theme's colors rather than guess.
+        colors = if (colors != null) {
+            ButtonDefaults.buttonColors(containerColor = colors.color, contentColor = colors.onColor)
+        } else {
+            ButtonDefaults.buttonColors()
+        },
         modifier = Modifier
             .widthIn(max = 360.dp)
             .fillMaxWidth()
@@ -254,6 +266,7 @@ fun CounterScreenPreview() {
     HapticHabitsTheme {
         CounterScreen(
             total = 42,
+            invertColors = false,
             buttons = listOf(
                 HabitButton(id = 1, name = "+1", weight = 1, position = 0),
                 HabitButton(id = 2, name = "Doomscrolling on the phone in bed at night", weight = 5, position = 1),
@@ -267,10 +280,32 @@ fun CounterScreenPreview() {
     }
 }
 
+@Preview
+@Composable
+fun CounterScreenDarkPreview() {
+    HapticHabitsTheme(darkTheme = true, dynamicColor = false) {
+        // A Surface gives the dark background and the matching text color, as the Scaffold does.
+        Surface {
+            CounterScreen(
+                total = 42,
+                invertColors = false,
+                buttons = listOf(
+                    HabitButton(id = 1, name = "+1", weight = 1, position = 0),
+                    HabitButton(id = 3, name = "Went for a walk", weight = -2, position = 2),
+                ),
+                onPress = {},
+                canUndo = true,
+                onUndo = {},
+                onOpenSettings = {},
+            )
+        }
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun CounterScreenNoButtonsPreview() {
     HapticHabitsTheme {
-        CounterScreen(total = 7, buttons = emptyList(), onPress = {}, canUndo = false, onUndo = {}, onOpenSettings = {})
+        CounterScreen(total = 7, buttons = emptyList(), invertColors = false, onPress = {}, canUndo = false, onUndo = {}, onOpenSettings = {})
     }
 }

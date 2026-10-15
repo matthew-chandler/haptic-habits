@@ -8,6 +8,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -20,6 +21,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -123,6 +125,49 @@ class CounterViewModelTest {
 
         assertTrue(viewModel.vibratesFor(1))
         assertFalse(viewModel.vibratesFor(-1))
+    }
+
+    @Test
+    fun colorsAreUnknownUntilTheSettingsLoad() = runTest {
+        val notYetLoaded = MutableSharedFlow<AppSettings>()
+        viewModel = CounterViewModel(dao, buttons, notYetLoaded)
+
+        assertNull(viewModel.invertColors.value)
+        // Vibration falls back to the defaults meanwhile.
+        assertTrue(viewModel.vibratesFor(1))
+
+        notYetLoaded.emit(AppSettings(invertColors = true))
+
+        assertEquals(true, viewModel.invertColors.value)
+    }
+
+    @Test
+    fun invertColorsFollowsTheSetting() {
+        assertEquals(false, viewModel.invertColors.value)
+
+        settings.value = AppSettings(invertColors = true)
+        assertEquals(true, viewModel.invertColors.value)
+
+        settings.value = AppSettings(invertColors = false)
+        assertEquals(false, viewModel.invertColors.value)
+    }
+
+    @Test
+    fun totalFollowsPressesAndUndoWithoutAnyCollector() = runTest {
+        // Kept current while Settings is showing, so home never comes back to a stale total.
+        assertEquals(0L, viewModel.total.value)
+
+        viewModel.recordTap(PLUS_ONE)
+        advanceUntilIdle()
+        assertEquals(1L, viewModel.total.value)
+
+        viewModel.recordTap(WALK)
+        advanceUntilIdle()
+        assertEquals(-2L, viewModel.total.value)
+
+        viewModel.undo()
+        advanceUntilIdle()
+        assertEquals(1L, viewModel.total.value)
     }
 
     @Test
