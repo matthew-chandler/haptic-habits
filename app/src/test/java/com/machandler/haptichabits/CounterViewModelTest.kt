@@ -1,5 +1,6 @@
 package com.machandler.haptichabits
 
+import com.machandler.haptichabits.data.AppSettings
 import com.machandler.haptichabits.data.TapEvent
 import com.machandler.haptichabits.data.TapEventDao
 import kotlinx.coroutines.CompletableDeferred
@@ -24,13 +25,14 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CounterViewModelTest {
     private lateinit var dao: FakeTapEventDao
+    private val settings = MutableStateFlow(AppSettings())
     private lateinit var viewModel: CounterViewModel
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         dao = FakeTapEventDao()
-        viewModel = CounterViewModel(dao)
+        viewModel = CounterViewModel(dao, settings)
     }
 
     @After
@@ -42,14 +44,14 @@ class CounterViewModelTest {
     fun nothingToUndoAtStartEvenWithEarlierTaps() = runTest {
         // Taps from a previous session are in the log, but this session hasn't changed anything.
         dao.insert(TapEvent(timestamp = 1_000, weight = 1))
-        viewModel = CounterViewModel(dao)
+        viewModel = CounterViewModel(dao, settings)
 
         assertFalse(viewModel.canUndo.value)
     }
 
     @Test
     fun tapMakesUndoAvailable() = runTest {
-        viewModel.recordTap()
+        viewModel.recordTap(1)
         advanceUntilIdle()
 
         assertTrue(viewModel.canUndo.value)
@@ -57,9 +59,36 @@ class CounterViewModelTest {
     }
 
     @Test
+    fun tapRecordsItsWeight() = runTest {
+        viewModel.recordTap(-3)
+        advanceUntilIdle()
+
+        assertEquals(-3L, dao.sum())
+    }
+
+    @Test
+    fun bothSignsVibrateByDefault() {
+        assertTrue(viewModel.vibratesFor(1))
+        assertTrue(viewModel.vibratesFor(-1))
+    }
+
+    @Test
+    fun vibrationFollowsTheSwitchForTheSignAsItChanges() {
+        settings.value = AppSettings(vibrateOnPositive = false, vibrateOnNegative = true)
+
+        assertFalse(viewModel.vibratesFor(1))
+        assertTrue(viewModel.vibratesFor(-1))
+
+        settings.value = AppSettings(vibrateOnPositive = true, vibrateOnNegative = false)
+
+        assertTrue(viewModel.vibratesFor(1))
+        assertFalse(viewModel.vibratesFor(-1))
+    }
+
+    @Test
     fun undoRemovesMostRecentSessionTapFirst() = runTest {
-        viewModel.recordTap()
-        viewModel.recordTap()
+        viewModel.recordTap(1)
+        viewModel.recordTap(1)
         advanceUntilIdle()
         val (first, second) = dao.ids()
 
@@ -80,7 +109,7 @@ class CounterViewModelTest {
     @Test
     fun undoNeverTouchesTapsFromEarlierSessions() = runTest {
         val earlier = dao.insert(TapEvent(timestamp = 1_000, weight = 1))
-        viewModel.recordTap()
+        viewModel.recordTap(1)
         advanceUntilIdle()
 
         viewModel.undo()
@@ -93,8 +122,8 @@ class CounterViewModelTest {
 
     @Test
     fun undoSkipsSessionTapsThatWereAlreadyDeleted() = runTest {
-        viewModel.recordTap()
-        viewModel.recordTap()
+        viewModel.recordTap(1)
+        viewModel.recordTap(1)
         advanceUntilIdle()
         val (first, second) = dao.ids()
         dao.deleteById(second) // e.g. deleted from History in a later roadmap step
@@ -109,13 +138,13 @@ class CounterViewModelTest {
 
     @Test
     fun undoRightAfterTapWaitsForThatTapToBeSaved() = runTest {
-        viewModel.recordTap()
+        viewModel.recordTap(1)
         advanceUntilIdle()
         val older = dao.ids().single()
 
         val gate = CompletableDeferred<Unit>()
         dao.insertGate = gate
-        viewModel.recordTap() // Insert is now held up.
+        viewModel.recordTap(1) // Insert is now held up.
         viewModel.undo()
         gate.complete(Unit)
         advanceUntilIdle()

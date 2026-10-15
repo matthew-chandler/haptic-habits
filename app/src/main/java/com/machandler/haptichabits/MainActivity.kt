@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machandler.haptichabits.data.HabitDatabase
+import com.machandler.haptichabits.data.SettingsStore
 import com.machandler.haptichabits.ui.theme.HapticHabitsTheme
 
 class MainActivity : ComponentActivity() {
@@ -40,7 +41,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             HapticHabitsTheme {
                 val counter = viewModel {
-                    CounterViewModel(HabitDatabase.getInstance(applicationContext).tapEventDao())
+                    CounterViewModel(
+                        HabitDatabase.getInstance(applicationContext).tapEventDao(),
+                        SettingsStore.from(applicationContext).settings,
+                    )
                 }
                 val vibration = remember { TapVibration(applicationContext) }
                 val total by counter.total.collectAsStateWithLifecycle()
@@ -49,11 +53,11 @@ class MainActivity : ComponentActivity() {
                     CounterScreen(
                         total = total,
                         onTap = {
-                            vibration.play()
-                            counter.recordTap()
+                            if (counter.vibratesFor(1)) vibration.play()
+                            counter.recordTap(1)
                         },
                         canUndo = canUndo,
-                        // Deliberately silent: only +1 vibrates.
+                        // Deliberately silent: only presses vibrate.
                         onUndo = counter::undo,
                         modifier = Modifier.padding(innerPadding),
                     )

@@ -2,8 +2,10 @@ package com.machandler.haptichabits
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.machandler.haptichabits.data.AppSettings
 import com.machandler.haptichabits.data.TapEvent
 import com.machandler.haptichabits.data.TapEventDao
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +16,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-class CounterViewModel(private val dao: TapEventDao) : ViewModel() {
+class CounterViewModel(
+    private val dao: TapEventDao,
+    settings: Flow<AppSettings>,
+) : ViewModel() {
 
     /** The running total, or null until the first value has loaded from the database. */
     val total: StateFlow<Long?> = dao.observeTotal()
@@ -32,14 +37,26 @@ class CounterViewModel(private val dao: TapEventDao) : ViewModel() {
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    // Collected from creation so the switches are known by the first press. Until the stored
+    // values load (a few ms after launch) the defaults apply.
+    private val settings: StateFlow<AppSettings> = settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+
+    /**
+     * Whether a press worth [weight] should vibrate, per the Settings switch for its sign.
+     * The caller plays the vibration, which keeps this class free of Android services.
+     */
+    fun vibratesFor(weight: Int): Boolean = settings.value.vibratesFor(weight)
+
     // Runs writes one at a time, in the order they were requested, so an undo pressed right
     // after +1 waits for that tap's insert (and its id) instead of undoing an older change.
     private val writeLock = Mutex()
 
-    fun recordTap() {
+    /** Records a press of a button worth [weight]. */
+    fun recordTap(weight: Int) {
         viewModelScope.launch {
             writeLock.withLock {
-                val id = dao.insert(TapEvent(timestamp = System.currentTimeMillis(), weight = 1))
+                val id = dao.insert(TapEvent(timestamp = System.currentTimeMillis(), weight = weight))
                 sessionChangeIds.update { it + id }
             }
         }
