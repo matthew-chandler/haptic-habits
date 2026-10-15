@@ -22,6 +22,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Lets a debug install sit next to the sideloaded release build.
+            applicationIdSuffix = ".debug"
+        }
         release {
             optimization {
                 enable = true
